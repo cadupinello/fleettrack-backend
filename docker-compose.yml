@@ -5,7 +5,7 @@ services:
     build: .
     container_name: fleettrack-backend
     ports:
-      - "3001:3001"
+      - "3001:3000"
     volumes:
       - .:/app
     env_file:
@@ -18,7 +18,7 @@ services:
     container_name: fleettrack-db
     restart: always
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

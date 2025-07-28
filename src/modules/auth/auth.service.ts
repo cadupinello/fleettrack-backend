@@ -1,17 +1,15 @@
 import { prisma } from "@/lib/prisma";
+import { generateToken } from "@/utils/jwt";
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import { LoginInput, RegisterInput } from "./auth.schema";
 
 export const registerUser = async (data: RegisterInput) => {
   const existingUser = await prisma.user.findUnique({
-    where: {
-      email: data.email,
-    },
+    where: { email: data.email },
   });
 
   if (existingUser) {
-    throw new Error("Email já cadastrado");
+    throw new Error("Email já cadastrado");
   }
 
   const hashedPassword = await bcrypt.hash(data.password, 10);
@@ -38,31 +36,22 @@ export const loginUser = async (data: LoginInput) => {
     where: { email: data.email },
   });
 
-  if (!user) {
-    throw new Error("Credenciais inválidas");
-  }
-
-  if (!user.password) {
+  if (!user || !user.password) {
     throw new Error("Credenciais inválidas");
   }
 
   const isPasswordValid = await bcrypt.compare(data.password, user.password);
-
   if (!isPasswordValid) {
     throw new Error("Credenciais inválidas");
   }
 
-  const token = jwt.sign(
-    {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    },
-    process.env.JWT_SECRET!,
-    {
-      expiresIn: "1d",
-    }
-  );
+  const token = generateToken({
+    sub: user.id,
+    email: user.email,
+    role: user.role,
+  });
+
+  console.log(token);
 
   return {
     token,

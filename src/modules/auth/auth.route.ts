@@ -13,9 +13,8 @@ router.get(
   requireAuth,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { user } = req;
-
+    console.log(user);
     return res.status(200).json({
-      message: "User found",
       user,
     });
   })

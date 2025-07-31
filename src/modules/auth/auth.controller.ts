@@ -27,13 +27,11 @@ export const loginController = async (
     const body = loginSchema.parse(req.body);
     const { token, user } = await loginUser(body);
 
-    console.log(token);
-
-    res.cookie("refreshToken", token, {
+    res.cookie("refresh-token", token, {
       httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      path: "/api/auth/refresh-token",
+      secure: false,
+      sameSite: 'lax',
+      path: "/",
       maxAge: 24 * 60 * 60 * 1000,
     });
 
@@ -49,7 +47,8 @@ export const refreshTokenController = async (
   next: NextFunction
 ) => {
   try {
-    const token = req.cookies.refreshToken;
+    const token = req.cookies["refresh-token"];
+    console.log('TOKEN ->> ', token);
 
     if (!token) {
       return res.status(401).json({ message: "Token não encontrado" });
@@ -77,11 +76,11 @@ export const logoutController = async (
   req: Request,
   res: Response,
 ) => {
-  res.clearCookie("refreshToken", {
+  res.clearCookie("refresh-token", {
     httpOnly: true,
-    secure: true,
-    sameSite: "strict",
-    path: "/api/auth/refresh-token",
+    secure: false,
+    sameSite: 'lax',
+    path: "/",
   });
   return res.status(200).json({ message: "Logout realizado com sucesso" });
 }

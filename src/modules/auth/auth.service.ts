@@ -4,6 +4,10 @@ import bcrypt from "bcrypt";
 import { LoginInput, RegisterInput } from "./auth.schema";
 
 export const registerUser = async (data: RegisterInput) => {
+  if (!data.name || !data.email || !data.password) {
+    throw new Error("Dados inválidos");
+  }
+  
   const existingUser = await prisma.user.findUnique({
     where: { email: data.email },
   });
@@ -32,6 +36,10 @@ export const registerUser = async (data: RegisterInput) => {
 };
 
 export const loginUser = async (data: LoginInput) => {
+  if (!data.email || !data.password) {
+    throw new Error("Credenciais inválidas");
+  }
+
   const user = await prisma.user.findUnique({
     where: { email: data.email },
   });
@@ -47,6 +55,7 @@ export const loginUser = async (data: LoginInput) => {
 
   const token = generateToken({
     sub: user.id,
+    name: user.name,
     email: user.email,
     role: user.role,
   });

@@ -3,7 +3,7 @@ import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
 export interface AuthRequest extends Request {
-  user?: Pick<User, "id" | "email" | "role">;
+  user?: Pick<User, "id" | "name" | "email" | "role">;
 }
 
 export const requireAuth = (
@@ -11,35 +11,35 @@ export const requireAuth = (
   res: Response,
   next: NextFunction
 ) => {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader?.startsWith("Bearer ")) {
+  const token = req.cookies['refresh-token'];
+
+  console.log("TOKEN COOKIE", token);
+
+  if (!token) {
     return res.status(401).json({
       message: "Acesso negado! Token não encontrado",
     });
   }
 
-  const token = authHeader.split(" ")[1] as string;
-
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as unknown as {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
       sub: string;
+      name: string;
       email: string;
       role: Role;
     };
 
     (req as AuthRequest).user = {
       id: decoded.sub,
+      name: decoded.name,
       email: decoded.email,
       role: decoded.role,
     };
 
     next();
   } catch (error) {
-    if (error instanceof Error) {
-      return res.status(401).json({
-        message: "Acesso negado! Token inválido",
-      });
-    }
+    return res.status(401).json({
+      message: "Acesso negado! Token inválido",
+    });
   }
 };

@@ -3,6 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
 import authRoutes from './modules/auth/auth.route'
+import driverRoutes from './modules/drivers/driver.route'
 
 dotenv.config()
 const PORT = process.env.PORT || 3000
@@ -22,6 +23,7 @@ app.get('/api/health', (req, res) => {
 })
 
 app.use('/api/auth', authRoutes)
+app.use('/api/drivers', driverRoutes)
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)

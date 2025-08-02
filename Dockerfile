@@ -1,20 +1,26 @@
-# Imagem base oficial do Bun
-FROM oven/bun:1.1.13
+FROM node:18-alpine
 
-# Diretório de trabalho dentro do container
 WORKDIR /app
 
-# Copia os arquivos
+# Instala dependências de build
+RUN apk add --no-cache python3 make g++ openssl
+
+# Configuração para módulos ES
+RUN npm install -g tsx
+
+# Copia arquivos de configuração
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Instala dependências
+RUN npm install
+
+# Copia o resto da aplicação
 COPY . .
 
-# Instala as dependências
-RUN bun install
+# Gera o cliente Prisma
+RUN npm run db:generate
 
-# Gera o client do Prisma
-RUN bunx prisma generate
-
-# Expõe a porta da aplicação
 EXPOSE 3000
 
-# Comando para iniciar o servidor
-CMD ["bun", "run", "dev"]
+CMD ["npm", "run", "dev"]

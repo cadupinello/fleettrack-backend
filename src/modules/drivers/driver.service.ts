@@ -8,7 +8,7 @@ export const driverService = {
     return prisma.$transaction(async (tx) => {
       const existing = await tx.driver.findFirst({
         where: {
-          OR: [{ phone: data.phone }, { licenseNumber: data.licenseNumber }],
+          OR: [{ phone: data.phone }],
         },
       });
 
@@ -49,15 +49,66 @@ export const driverService = {
     });
   },
 
-  findAll: async (status?: DriverStatus) => {
-    return prisma.driver.findMany({
-      where: status ? { status } : undefined,
-      include: {
-        vehicles: true,
-        user: { select: { name: true, email: true } },
+  findAll: async (filters?: {
+    name?: string;
+    phone?: string;
+    licenseNumber?: string;
+    status?: DriverStatus;
+    page?: number;
+    limit?: number;
+  }) => {
+    const {
+      name,
+      phone,
+      licenseNumber,
+      status,
+      page = 1,
+      limit = 10,
+    } = filters || {};
+
+    console.log(filters);
+
+    const filtersList: Prisma.DriverWhereInput[] = [];
+
+    if (status) filtersList.push({ status });
+    if (name)
+      filtersList.push({ name: { contains: name, mode: "insensitive" } });
+    if (phone)
+      filtersList.push({ phone: { contains: phone, mode: "insensitive" } });
+    if (licenseNumber)
+      filtersList.push({
+        licenseNumber: { contains: licenseNumber, mode: "insensitive" },
+      });
+
+    const whereClause: Prisma.DriverWhereInput = filtersList.length
+      ? { AND: filtersList }
+      : {};
+
+    const [drivers, totalCount] = await Promise.all([
+      prisma.driver.findMany({
+        where: whereClause,
+        include: {
+          vehicles: true,
+          user: { select: { name: true, email: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.driver.count({ where: whereClause }),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    return {
+      data: drivers,
+      pagination: {
+        totalCount,
+        totalPages,
+        currentPage: page,
+        pageSize: limit,
       },
-      orderBy: { createdAt: "desc" },
-    });
+    };
   },
 
   findById: async (id: string) => {

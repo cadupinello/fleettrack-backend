@@ -10,7 +10,7 @@ RUN npm install -g tsx
 
 # Copia arquivos de configuração
 COPY package*.json ./
-COPY prisma ./prisma/
+#COPY prisma ./prisma/
 
 # Instala dependências
 RUN npm install
@@ -19,7 +19,7 @@ RUN npm install
 COPY . .
 
 # Gera o cliente Prisma
-RUN npm run db:generate
+# RUN npm run db:generate
 
 EXPOSE 3000
 

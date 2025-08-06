@@ -28,7 +28,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: sh -c "npm run db:generate && npm run dev"
+    # command: sh -c "npm run db:generate && npm run dev"
+    command: sh -c "npm run dev"
 
 volumes:
   postgres_data:

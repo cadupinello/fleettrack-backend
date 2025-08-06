@@ -1,51 +1,57 @@
-import { DriverStatus, Prisma, PrismaClient } from "@prisma/client";
+import {
+  DriverStatus,
+  Prisma,
+  PrismaClient,
+  VehicleStatus,
+  VehicleType,
+} from "@prisma/client";
+import dayjs from "dayjs";
 import { CreateDriverInput, UpdateDriverInput } from "./driver.schema";
 
 const prisma = new PrismaClient();
 
 export const driverService = {
   create: async (data: CreateDriverInput) => {
+    console.log("DATA", data);
     return prisma.$transaction(async (tx) => {
-      const existing = await tx.driver.findFirst({
+      const conflict = await tx.driver.findFirst({
         where: {
-          OR: [{ phone: data.phone }],
+          OR: [{ phone: data.phone }, { licenseNumber: data.licenseNumber }],
         },
       });
 
-      if (existing) {
-        throw new Prisma.PrismaClientKnownRequestError(
-          existing.phone === data.phone
-            ? "Phone already in use"
-            : "License number already in use",
-          { code: "P2002", clientVersion: "4.0" }
+      if (conflict) {
+        throw new Error(
+          conflict.phone === data.phone
+            ? "Telefone já está em uso"
+            : "Número da CNH já está em uso"
         );
       }
 
-      const driverData: Prisma.DriverCreateInput = {
-        name: data.name,
-        phone: data.phone,
-        licenseNumber: data.licenseNumber,
-        licenseType: data.licenseType,
-        licenseExpiry: data.licenseExpiry,
-        status: data.status || "ACTIVE",
-        user: { connect: { id: data.userId } },
-        vehicles: data.vehicles
-          ? {
-              create: data.vehicles.map((v) => ({
-                plate: v.plate,
-                model: v.model,
-                year: v.year,
-                type: v.type,
-                status: v.status || "AVAILABLE",
-              })),
-            }
-          : undefined,
-      };
-
-      return tx.driver.create({
-        data: driverData,
+      const driver = await tx.driver.create({
+        data: {
+          name: data.name,
+          phone: data.phone ? data.phone.replace(/\D+/g, "") : data.phone,
+          licenseNumber: data.licenseNumber,
+          licenseType: data.licenseType,
+          licenseExpiry: data.licenseExpiry
+            ? dayjs(data.licenseExpiry).toDate()
+            : data.licenseExpiry,
+          status: data.status || DriverStatus.ACTIVE,
+          user: { connect: { id: data.userId } },
+          vehicles: data.vehicles
+            ? {
+                create: data.vehicles.map((vehicle) => ({
+                  ...vehicle,
+                  status: vehicle.status || "AVAILABLE",
+                })),
+              }
+            : undefined,
+        },
         include: { vehicles: true },
       });
+
+      return driver;
     });
   },
 
@@ -66,27 +72,22 @@ export const driverService = {
       limit = 10,
     } = filters || {};
 
-    console.log(filters);
+    const formmatedPhone = phone?.replace(/\D+/g, "");
 
-    const filtersList: Prisma.DriverWhereInput[] = [];
-
-    if (status) filtersList.push({ status });
-    if (name)
-      filtersList.push({ name: { contains: name, mode: "insensitive" } });
-    if (phone)
-      filtersList.push({ phone: { contains: phone, mode: "insensitive" } });
-    if (licenseNumber)
-      filtersList.push({
+    const where: Prisma.DriverWhereInput = {
+      ...(name && { name: { contains: name, mode: "insensitive" } }),
+      ...(phone && {
+        phone: { contains: formmatedPhone, mode: "insensitive" },
+      }),
+      ...(licenseNumber && {
         licenseNumber: { contains: licenseNumber, mode: "insensitive" },
-      });
+      }),
+      ...(status && { status }),
+    };
 
-    const whereClause: Prisma.DriverWhereInput = filtersList.length
-      ? { AND: filtersList }
-      : {};
-
-    const [drivers, totalCount] = await Promise.all([
+    const [data, totalCount] = await Promise.all([
       prisma.driver.findMany({
-        where: whereClause,
+        where,
         include: {
           vehicles: true,
           user: { select: { name: true, email: true } },
@@ -95,16 +96,14 @@ export const driverService = {
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.driver.count({ where: whereClause }),
+      prisma.driver.count({ where }),
     ]);
 
-    const totalPages = Math.ceil(totalCount / limit);
-
     return {
-      data: drivers,
+      data,
       pagination: {
         totalCount,
-        totalPages,
+        totalPages: Math.ceil(totalCount / limit),
         currentPage: page,
         pageSize: limit,
       },
@@ -123,34 +122,16 @@ export const driverService = {
 
   update: async (id: string, data: UpdateDriverInput) => {
     return prisma.$transaction(async (tx) => {
-      const existingDriver = await tx.driver.findUnique({
+      const driver = await tx.driver.findUnique({
         where: { id },
         include: { vehicles: true },
       });
 
-      if (!existingDriver) {
-        throw new Prisma.PrismaClientKnownRequestError("Driver not found", {
-          code: "P2025",
-          clientVersion: "4.0",
-        });
+      if (!driver) {
+        throw new Error("Motorista não encontrado");
       }
 
-      const updateData: Prisma.DriverUpdateInput = {
-        ...data,
-        name: data.name || existingDriver.name,
-        phone: data.phone || existingDriver.phone,
-        licenseNumber: data.licenseNumber || existingDriver.licenseNumber,
-        licenseType: data.licenseType || existingDriver.licenseType,
-        licenseExpiry: data.licenseExpiry || existingDriver.licenseExpiry,
-        status: data.status || existingDriver.status,
-        vehicles: {
-          update: data?.vehicles?.map((vehicle) => ({
-            where: { plate: vehicle.plate },
-            data: vehicle,
-          })),
-        },
-      };
-
+      // Verifica conflitos com outros motoristas
       if (data.phone || data.licenseNumber) {
         const conflict = await tx.driver.findFirst({
           where: {
@@ -168,35 +149,46 @@ export const driverService = {
           throw new Error(
             conflict.phone === data.phone
               ? "Telefone já está em uso"
-              : "Número de licença já está em uso"
+              : "Número da CNH já está em uso"
           );
         }
       }
 
+      console.log("Data de expiração ->>>>>>>>>>>>>>>>>", data.licenseExpiry);
+      // Criação do objeto de update
+      const updateData: Prisma.DriverUpdateInput = {
+        name: data.name,
+        phone: data.phone,
+        licenseNumber: data.licenseNumber,
+        licenseType: data.licenseType,
+        licenseExpiry: data.licenseExpiry
+          ? dayjs(data.licenseExpiry).toDate()
+          : data.licenseExpiry,
+        status: data.status,
+      };
+
+      // Se veículos foram enviados, recria todos
       if (data.vehicles) {
-        const vehicles = data.vehicles.map((vehicle) => {
-          if (
-            !vehicle.plate ||
-            !vehicle.model ||
-            !vehicle.year ||
-            !vehicle.type
-          ) {
-            throw new Error("Dados do veículo inválidos");
-          }
-          return {
-            plate: vehicle.plate,
-            model: vehicle.model,
-            year: vehicle.year,
-            type: vehicle.type,
-            status: vehicle.status || "AVAILABLE",
-          };
-        });
+        const validVehicles = data.vehicles.filter(
+          (v) => v.plate && v.model && v.year && v.type
+        ) as {
+          plate: string;
+          model: string;
+          year: number;
+          type: VehicleType;
+          status?: VehicleStatus;
+        }[];
+
         updateData.vehicles = {
-          deleteMany: {},
-          create: vehicles,
+          deleteMany: {}, // remove todos os antigos
+          create: validVehicles.map((v) => ({
+            plate: v.plate,
+            model: v.model,
+            year: v.year,
+            type: v.type,
+            status: v.status || "AVAILABLE",
+          })),
         };
-      } else {
-        delete updateData.vehicles;
       }
 
       return tx.driver.update({
@@ -206,7 +198,6 @@ export const driverService = {
       });
     });
   },
-
   delete: async (id: string) => {
     return prisma.$transaction(async (tx) => {
       await tx.vehicle.updateMany({
